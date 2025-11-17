@@ -3,11 +3,11 @@ use quote::{ToTokens, quote};
 use syn::{parse::*, punctuated::Punctuated, *};
 
 #[proc_macro]
-pub fn boilerm8(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    syn::parse_macro_input!(item with _boilerm8).into()
+pub fn strux(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    syn::parse_macro_input!(item with _strux).into()
 }
 
-fn _boilerm8(input: ParseStream) -> syn::Result<TokenStream> {
+fn _strux(input: ParseStream) -> syn::Result<TokenStream> {
     let (fwds, hdr, rows) = parse(input)?;
     for row in &rows {
         if row.cells.len() != hdr.cells.len() {
@@ -361,7 +361,7 @@ mod tests {
 
     #[test]
     fn smoke() {
-        let tokens = _boilerm8
+        let tokens = _strux
             .parse2(quote! {
                     /// Baz comment.
                     Baz {
