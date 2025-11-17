@@ -3,4 +3,15 @@ name = "boilerm8"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+proc-macro = true
+
 [dependencies]
+proc-macro2 = "1.0.103"
+quote = "1.0.42"
+syn = { version = "2.0.110", default-features = false, features = ["clone-impls", "derive", "parsing", "printing", "proc-macro"] }
+
+[dev-dependencies]
+expect-test = "1.5.1"
+prettyplease = "0.2.37"
+syn = { version = "2.0.110", features = ["extra-traits"] }
