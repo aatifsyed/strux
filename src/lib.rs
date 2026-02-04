@@ -1,6 +1,92 @@
 use proc_macro2::TokenStream;
 use quote::{ToTokens, quote};
 use syn::{parse::*, punctuated::Punctuated, *};
+mod rollup;
+
+/// Generate multiple structs which accumulate fields,
+/// and optionally functions which convert between them.
+///
+/// ```
+/// strux::rollup! {
+///     struct Red {
+///         apple: usize,
+///     }
+///
+///     struct RedYellow {
+///         banana: bool,
+///         lemon: f32,
+///     }
+///
+///     // generate a conversion function RedYellow -> RedYellowGreen
+///     fn add_green();
+///
+///                                   // you can add attributes and
+///     #[derive(Default, PartialEq)] // visibility every you'd expect
+///     pub struct RedYellowGreen {
+///         lime: String = String::from("I'm a lime!"),
+///                   // ^ you must specify how the conversion
+///                   //   fills in this field.
+///
+///         /// some docs
+///         pub avocado: Vec<u8> = vec![],
+///     }
+/// }
+///
+///
+/// let red = Red { apple: 0 };
+/// let red_yellow = RedYellow {
+///     apple: 0,     // contains fields from the preceding struct
+///     banana: true, // AND the ones specified
+///     lemon: 0.0,
+/// };
+///
+/// let red_yellow_green = add_green(red_yellow);
+///
+/// assert!(red_yellow_green == RedYellowGreen {
+///     banana: true,
+///     lime: String::from("I'm a lime!"),
+///     ..Default::default()
+/// } );
+/// ```
+///
+/// You may also start the chain with a struct defined elsewhere:
+///
+/// ```
+/// mod elsewhere {
+///     #[derive(Default)]
+///     pub struct Red {
+///         pub apple: usize,
+///         pub cherry: u8,
+///     }
+/// }
+///
+/// use elsewhere::Red;
+///
+/// strux::rollup! {
+///     extern struct Red {
+///         apple: usize,
+///         cherry: u8,
+///     }
+///
+///     fn add_yellow();
+///
+///     #[derive(Default, PartialEq)]
+///     struct RedYellow {
+///         banana: bool = true,
+///     }
+/// }
+///
+/// let red = Red::default();
+/// let red_yellow = add_yellow(red);
+/// assert!(red_yellow == RedYellow {
+///     banana: true,
+///     ..Default::default()
+/// });
+/// ```
+#[proc_macro]
+pub fn rollup(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    parse_macro_input!(input with rollup::_rollup).into()
+}
 
 #[proc_macro]
 pub fn strux(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
