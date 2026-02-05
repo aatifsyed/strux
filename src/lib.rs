@@ -32,11 +32,11 @@ mod rollup;
 ///
 ///     // the generated function can also be a method.
 ///     /// some docs
-///     fn add_blue(self);
+///     pub fn add_blue(self);
 ///
 ///     pub struct RedYellowGreenBlue {
 ///         /// some more docs
-///         pub sky: String = String::from("I've got clouds"),
+///         sky: String = String::from("I've got clouds"),
 ///     }
 /// }
 ///
