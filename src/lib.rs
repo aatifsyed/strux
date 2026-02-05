@@ -67,6 +67,7 @@ mod rollup;
 ///     pub struct Red {
 ///         pub apple: usize,
 ///         pub cherry: u8,
+///         _ignored: (),
 ///     }
 /// }
 ///
@@ -76,21 +77,21 @@ mod rollup;
 ///     extern struct Red {
 ///         apple: usize,
 ///         cherry: u8,
+///         ..
 ///     }
 ///
-///     fn add_yellow();
+///     fn add_yellow(self);
 ///
-///     #[derive(Default, PartialEq)]
+///     #[derive(Debug, PartialEq)]
 ///     struct RedYellow {
 ///         banana: bool = true,
 ///     }
 /// }
 ///
-/// let red = Red::default();
-/// let red_yellow = add_yellow(red);
-/// assert!(red_yellow == RedYellow {
+/// assert_eq!(Red::default().add_yellow(), RedYellow {
+///     apple: 0,
+///     cherry: 0,
 ///     banana: true,
-///     ..Default::default()
 /// });
 /// ```
 #[proc_macro]

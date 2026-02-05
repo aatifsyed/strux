@@ -4,27 +4,29 @@ use syn::{
     Attribute, Expr, Ident, Token, Type, Visibility, braced, parenthesized,
     parse::{Nothing, Parse, ParseStream},
     punctuated::{Pair, Punctuated},
+    spanned::Spanned as _,
     token,
 };
 
 pub fn _rollup(input: ParseStream) -> syn::Result<TokenStream> {
-    Ok(generate(input.parse()?))
+    generate(input.parse()?)
 }
 
-fn generate(Ast { first, items }: Ast) -> TokenStream {
+fn generate(Ast { first, items }: Ast) -> syn::Result<TokenStream> {
     let mut output = TokenStream::new();
-    let (mut running_ident, mut running_fields) = match first {
+    let (mut running_ident, mut running_fields, mut dot_dot) = match first {
         First::Extern(ExternStruct {
             r#extern: _,
             r#struct: _,
             ident,
             brace: _,
             fields,
-        }) => (ident, fields),
+            dot_dot,
+        }) => (ident, fields, dot_dot),
         First::Struct(first) => {
             first.to_tokens(&mut output);
             let Struct { ident, fields, .. } = first;
-            (ident, fields)
+            (ident, fields, None)
         }
     };
 
@@ -55,6 +57,7 @@ fn generate(Ast { first, items }: Ast) -> TokenStream {
                      }| quote!(#ident: #expr),
                 );
                 let struct_name = &r#struct.ident;
+                let dot_dot = dot_dot.take();
                 output.extend(match rcvr {
                     Some(sel) => quote! {
                         impl #running_ident {
@@ -62,6 +65,7 @@ fn generate(Ast { first, items }: Ast) -> TokenStream {
                             #vis #r#fn #fn_name(#sel) -> #struct_name {
                                 let #running_ident {
                                     #(#running_fields,)*
+                                    #dot_dot
                                 } = self;
                                 #struct_name {
                                     #(#running_fields,)*
@@ -74,6 +78,7 @@ fn generate(Ast { first, items }: Ast) -> TokenStream {
                         #(#attrs)*
                         #vis #r#fn #fn_name(#running_ident {
                             #(#running_fields,)*
+                            #dot_dot
                         }: #running_ident) -> #struct_name {
                             #struct_name {
                                 #(#running_fields,)*
@@ -84,7 +89,15 @@ fn generate(Ast { first, items }: Ast) -> TokenStream {
                 });
                 r#struct.map(|field| field.map(|_| Nothing))
             }
-            Item::Unlinked(r#struct) => r#struct,
+            Item::Unlinked(r#struct) => {
+                if let Some(dd) = dot_dot.take() {
+                    return Err(syn::Error::new(
+                        dd.span(),
+                        "`..` only has meaning when followed by a conversion function",
+                    ));
+                }
+                r#struct
+            }
         };
         running_fields.extend(r#struct.fields);
         r#struct.fields = running_fields;
@@ -95,7 +108,7 @@ fn generate(Ast { first, items }: Ast) -> TokenStream {
         running_ident = r#struct.ident;
     }
 
-    output
+    Ok(output)
 }
 
 struct Ast {
@@ -108,12 +121,28 @@ impl Parse for Ast {
         let r#first = match input.peek(Token![extern]) {
             true => {
                 let content;
+                let mut dot_dot = None;
                 First::Extern(ExternStruct {
                     r#extern: input.parse()?,
                     r#struct: input.parse()?,
                     ident: input.parse()?,
                     brace: braced!(content in input),
-                    fields: content.call(Punctuated::parse_terminated)?,
+                    fields: {
+                        let mut fields = Punctuated::new();
+                        while !content.is_empty() {
+                            fields.push_value(content.parse()?);
+                            if content.is_empty() {
+                                break;
+                            }
+                            fields.push_punct(content.parse()?);
+                            if let Some(dd) = content.parse()? {
+                                dot_dot = Some(dd);
+                                break;
+                            }
+                        }
+                        fields
+                    },
+                    dot_dot,
                 })
             }
             false => First::Struct({
@@ -202,6 +231,7 @@ struct ExternStruct {
     #[expect(dead_code)]
     brace: token::Brace,
     fields: Punctuated<NamedField<Nothing>, Token![,]>,
+    dot_dot: Option<Token![..]>,
 }
 
 struct Conv {
@@ -479,6 +509,57 @@ mod tests {
                     /// field docs
                     frozen_insect: (),
                     pub more_fire: Vec<String>,
+                }
+            "#]],
+        );
+    }
+
+    #[test]
+    fn non_exhaustive() {
+        t(
+            quote! {
+                extern struct Red {
+                    apple: String,
+                    ..
+                }
+
+                fn conv(self);
+
+                struct RedGreen {
+                    tree: usize = 0,
+                }
+            },
+            expect![[r#"
+                impl Red {
+                    fn conv(self) -> RedGreen {
+                        let Red { apple, .. } = self;
+                        RedGreen { apple, tree: 0 }
+                    }
+                }
+                struct RedGreen {
+                    apple: String,
+                    tree: usize,
+                }
+            "#]],
+        );
+    }
+
+    #[test]
+    fn bad_dot() {
+        t(
+            quote! {
+                extern struct Red {
+                    apple: String,
+                    ..
+                }
+
+                struct RedGreen {
+                    tree: usize,
+                }
+            },
+            expect![[r#"
+                ::core::compile_error! {
+                    "`..` only has meaning when followed by a conversion function"
                 }
             "#]],
         );
