@@ -33,12 +33,12 @@ fn generate(Ast { first, items }: Ast) -> TokenStream {
             Item::Linked {
                 conv:
                     Conv {
-                        r#impl,
                         attrs,
                         vis,
                         r#fn,
                         ident: fn_name,
                         paren: _,
+                        rcvr,
                         semi: _,
                     },
                 r#struct,
@@ -55,11 +55,11 @@ fn generate(Ast { first, items }: Ast) -> TokenStream {
                      }| quote!(#ident: #expr),
                 );
                 let struct_name = &r#struct.ident;
-                output.extend(match r#impl {
-                    Some((r#impl, _)) => quote! {
-                        #r#impl #running_ident {
+                output.extend(match rcvr {
+                    Some(sel) => quote! {
+                        impl #running_ident {
                             #(#attrs)*
-                            #vis #r#fn #fn_name(self) -> #struct_name {
+                            #vis #r#fn #fn_name(#sel) -> #struct_name {
                                 let #running_ident {
                                     #(#running_fields,)*
                                 } = self;
@@ -132,57 +132,45 @@ impl Parse for Ast {
         let mut items = vec![];
 
         while !input.is_empty() {
-            let item = match input.peek(Token![impl]) {
+            let attrs = input.call(Attribute::parse_outer)?;
+            let vis = input.parse()?;
+            let item = match input.peek(Token![fn]) {
                 true => Item::Linked {
                     conv: {
                         let content;
                         Conv {
-                            r#impl: Some((input.parse()?, braced!(content in input))),
-                            attrs: content.call(Attribute::parse_outer)?,
-                            vis: content.parse()?,
-                            r#fn: content.parse()?,
-                            ident: content.parse()?,
-                            paren: {
-                                let _content;
-                                parenthesized!(_content in content)
-                            },
-                            semi: content.parse()?,
+                            attrs,
+                            vis,
+                            r#fn: input.parse()?,
+                            ident: input.parse()?,
+                            paren: parenthesized!(content in input),
+                            rcvr: content.parse()?,
+                            semi: input.parse()?,
                         }
                     },
-                    r#struct: input.call(Struct::parse_unambiguous)?,
+                    r#struct: {
+                        let content;
+                        Struct {
+                            attrs: input.call(Attribute::parse_outer)?,
+                            vis: input.parse()?,
+                            r#struct: input.parse()?,
+                            ident: input.parse()?,
+                            brace: braced!(content in input),
+                            fields: content.call(Punctuated::parse_terminated)?,
+                        }
+                    },
                 },
-                false => {
-                    let attrs = input.call(Attribute::parse_outer)?;
-                    let vis = input.parse()?;
-                    match input.peek(Token![fn]) {
-                        true => Item::Linked {
-                            conv: Conv {
-                                r#impl: None,
-                                attrs,
-                                vis,
-                                r#fn: input.parse()?,
-                                ident: input.parse()?,
-                                paren: {
-                                    let _content;
-                                    parenthesized!(_content in input)
-                                },
-                                semi: input.parse()?,
-                            },
-                            r#struct: input.call(Struct::parse_unambiguous)?,
-                        },
-                        false => Item::Unlinked({
-                            let content;
-                            Struct {
-                                attrs,
-                                vis,
-                                r#struct: input.parse()?,
-                                ident: input.parse()?,
-                                brace: braced!(content in input),
-                                fields: content.call(Punctuated::parse_terminated)?,
-                            }
-                        }),
+                false => Item::Unlinked({
+                    let content;
+                    Struct {
+                        attrs,
+                        vis,
+                        r#struct: input.parse()?,
+                        ident: input.parse()?,
+                        brace: braced!(content in input),
+                        fields: content.call(Punctuated::parse_terminated)?,
                     }
-                }
+                }),
             };
 
             items.push(item);
@@ -217,13 +205,13 @@ struct ExternStruct {
 }
 
 struct Conv {
-    r#impl: Option<(Token![impl], token::Brace)>,
     attrs: Vec<Attribute>,
     vis: Visibility,
     r#fn: Token![fn],
     ident: Ident,
     #[expect(dead_code)]
     paren: token::Paren,
+    rcvr: Option<Token![self]>,
     #[expect(dead_code)]
     semi: Token![;],
 }
@@ -261,20 +249,6 @@ impl<T> Struct<T> {
                 })
                 .collect(),
         }
-    }
-}
-
-impl<T: Parse> Struct<T> {
-    fn parse_unambiguous(input: ParseStream) -> syn::Result<Self> {
-        let content;
-        Ok(Struct {
-            attrs: input.call(Attribute::parse_outer)?,
-            vis: input.parse()?,
-            r#struct: input.parse()?,
-            ident: input.parse()?,
-            brace: braced!(content in input),
-            fields: content.call(Punctuated::parse_terminated)?,
-        })
     }
 }
 
@@ -440,10 +414,8 @@ mod tests {
                     frozen_insect: (),
                 }
 
-                impl {
-                    #[allow(unused)]
-                    fn amber2red();
-                }
+                #[allow(unused)]
+                fn amber2red(self);
 
                 struct Red2 {
                     pub more_fire: Vec<String> = vec![String::new()],

@@ -21,14 +21,22 @@ mod rollup;
 ///     fn add_green();
 ///
 ///                                   // you can add attributes and
-///     #[derive(Default, PartialEq)] // visibility every you'd expect
+///     #[derive(Default, PartialEq)] // visibility everywhere you'd expect
 ///     pub struct RedYellowGreen {
 ///         lime: String = String::from("I'm a lime!"),
 ///                   // ^ you must specify how the conversion
 ///                   //   fills in this field.
 ///
-///         /// some docs
 ///         pub avocado: Vec<u8> = vec![],
+///     }
+///
+///     // the generated function can also be a method.
+///     /// some docs
+///     fn add_blue(self);
+///
+///     pub struct RedYellowGreenBlue {
+///         /// some more docs
+///         pub sky: String = String::from("I've got clouds"),
 ///     }
 /// }
 ///
@@ -47,6 +55,8 @@ mod rollup;
 ///     lime: String::from("I'm a lime!"),
 ///     ..Default::default()
 /// } );
+///
+/// let red_yellow_green_blue = red_yellow_green.add_blue();
 /// ```
 ///
 /// You may also start the chain with a struct defined elsewhere:
